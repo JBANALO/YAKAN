@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -73,6 +74,31 @@ const CustomOrderScreen = ({ navigation }) => {
     return Math.round(selectedPattern.basePrice * selectedSize.multiplier);
   };
 
+  const saveCustomOrder = async (orderData) => {
+    const orderRef = 'CUSTOM-' + Date.now().toString().slice(-7);
+    const finalOrder = {
+      orderRef,
+      date: new Date().toISOString(),
+      items: [{
+        name: `Custom Order: ${orderData.pattern}`,
+        quantity: 1,
+        price: orderData.estimatedPrice,
+        details: `Color: ${orderData.color}, Size: ${orderData.size}`,
+      }],
+      total: orderData.estimatedPrice,
+      subtotal: orderData.estimatedPrice,
+      shippingFee: 0,
+      status: 'pending_confirmation', // Custom orders need confirmation first
+      isCustom: true, // Add a flag to identify custom orders
+      customDetails: orderData,
+    };
+
+    const existingOrders = await AsyncStorage.getItem('pendingOrders');
+    const orders = existingOrders ? JSON.parse(existingOrders) : [];
+    orders.push(finalOrder);
+    await AsyncStorage.setItem('pendingOrders', JSON.stringify(orders));
+  };
+
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -87,7 +113,7 @@ const CustomOrderScreen = ({ navigation }) => {
     }
   };
 
-  const handleSubmitOrder = () => {
+  const handleSubmitOrder = async () => {
     if (!selectedPattern && !uploadedImage) {
       Alert.alert('Missing Information', 'Please select a pattern or upload your design');
       return;
@@ -110,11 +136,13 @@ const CustomOrderScreen = ({ navigation }) => {
       estimatedPrice: calculateEstimatedPrice(),
     };
     
-    console.log('Order submitted:', orderData);
+    await saveCustomOrder(orderData);
+
     Alert.alert(
       'Order Submitted!',
-      'Thank you for your custom order. We will contact you within 24-48 hours.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
+      'Thank you! Your custom order request has been received. You can view its status in "Track Orders".',
+      [{ text: 'View My Orders', onPress: () => navigation.navigate('TrackOrders') },
+       { text: 'OK', onPress: () => navigation.goBack(), style: 'cancel' }]
     );
   };
 

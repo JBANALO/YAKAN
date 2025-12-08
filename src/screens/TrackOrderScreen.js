@@ -7,73 +7,111 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import colors from '../constants/colors';
+import { useOrders } from '../../useOrders';
+import { trackingStages } from '../constants/tracking';
 
 const TrackOrderScreen = ({ navigation }) => {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    orders,
+    loading,
+    refreshing,
+    loadOrders,
+    onRefresh,
+    savePaymentProof,
+  } = useOrders();
+  
+  useEffect(() => {
+    // Add a listener to refresh orders when the screen is focused
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadOrders();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  const getStatusInfo = (status) => {
+    const stage = trackingStages.find(s => s.key === status);
+    if (stage) {
+      return {
+        text: stage.label,
+        color: stage.color,
+      };
+    }
+    return {
+      text: 'Unknown',
+      color: '#757575',
+    };
+  };
+
 
   useEffect(() => {
     loadOrders();
   }, []);
 
-  const loadOrders = async () => {
-    try {
-      const savedOrders = await AsyncStorage.getItem('pendingOrders');
-      if (savedOrders) {
-        const parsedOrders = JSON.parse(savedOrders);
-        setOrders(parsedOrders.sort((a, b) => new Date(b.date) - new Date(a.date)));
-      }
-    } catch (error) {
-      console.log('Error loading orders:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const handleUploadPaymentProof = async (order) => {
+    Alert.alert(
+      'Upload Payment Proof',
+      'Choose how to upload your payment proof',
+      [
+        {
+          text: 'Take Photo',
+          onPress: () => takePhoto(order),
+        },
+        {
+          text: 'Choose from Gallery',
+          onPress: () => pickImage(order),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const takePhoto = async (order) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera permission is required');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      savePaymentProof(order, result.assets[0].uri);
     }
   };
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadOrders();
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending_payment':
-        return '#FF9800';
-      case 'payment_verified':
-        return '#2196F3';
-      case 'processing':
-        return '#9C27B0';
-      case 'shipped':
-        return '#00BCD4';
-      case 'delivered':
-        return '#4CAF50';
-      case 'cancelled':
-        return '#F44336';
-      default:
-        return '#757575';
+  const pickImage = async (order) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Gallery permission is required');
+      return;
     }
-  };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'pending_payment':
-        return 'Pending Payment';
-      case 'payment_verified':
-        return 'Payment Verified';
-      case 'processing':
-        return 'Processing';
-      case 'shipped':
-        return 'Shipped';
-      case 'delivered':
-        return 'Delivered';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return 'Unknown';
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      savePaymentProof(order, result.assets[0].uri);
     }
   };
 
@@ -89,14 +127,13 @@ const TrackOrderScreen = ({ navigation }) => {
   };
 
   const renderOrderItem = (order, index) => {
-    const statusColor = getStatusColor(order.status);
-    const statusText = getStatusText(order.status);
+    const { color: statusColor, text: statusText } = getStatusInfo(order.status);
 
     return (
       <TouchableOpacity
-        key={index}
+        key={order.orderRef || index}
         style={styles.orderCard}
-        onPress={() => navigation.navigate('OrderDetails', { order })}
+        onPress={() => navigation.navigate('OrderDetails', { orderData: order })}
         activeOpacity={0.7}
       >
         <View style={styles.orderHeader}>
@@ -114,15 +151,24 @@ const TrackOrderScreen = ({ navigation }) => {
         <View style={styles.divider} />
 
         <View style={styles.itemsContainer}>
-          {order.items.slice(0, 2).map((item, idx) => (
-            <Text key={idx} style={styles.itemText}>
-              {item.name} x {item.quantity}
-            </Text>
-          ))}
-          {order.items.length > 2 && (
-            <Text style={styles.moreItems}>
-              +{order.items.length - 2} more item{order.items.length - 2 > 1 ? 's' : ''}
-            </Text>
+          {order.isCustom ? (
+            <View>
+              <Text style={styles.itemText}>{order.items[0].name}</Text>
+              <Text style={styles.customDetailText}>{order.items[0].details}</Text>
+            </View>
+          ) : (
+            <>
+              {order.items.slice(0, 2).map((item, idx) => (
+                <Text key={idx} style={styles.itemText}>
+                  {item.name} x {item.quantity}
+                </Text>
+              ))}
+              {order.items.length > 2 && (
+                <Text style={styles.moreItems}>
+                  +{order.items.length - 2} more item{order.items.length - 2 > 1 ? 's' : ''}
+                </Text>
+              )}
+            </>
           )}
         </View>
 
@@ -131,11 +177,25 @@ const TrackOrderScreen = ({ navigation }) => {
           <Text style={styles.totalAmount}>₱{order.total.toFixed(2)}</Text>
         </View>
 
-        {order.status === 'pending_payment' && (
-          <View style={styles.paymentReminder}>
-            <Text style={styles.reminderText}>
-              Please send your payment proof to complete this order
-            </Text>
+        {order.status === 'pending_payment' && !order.isCustom && (
+          <TouchableOpacity 
+            style={styles.paymentReminder}
+            onPress={() => handleUploadPaymentProof(order)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.reminderContent}>
+              <Text style={styles.reminderText}>
+                Please send your payment proof to complete this order
+              </Text>
+              <Text style={styles.uploadButtonText}>📸 Upload</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {order.paymentProof && (
+          <View style={styles.proofUploaded}>
+            <Text style={styles.proofUploadedText}>✓ Payment proof uploaded</Text>
+            <Image source={{ uri: order.paymentProof }} style={styles.proofThumbnail} />
           </View>
         )}
 
@@ -351,6 +411,12 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
   },
+  customDetailText: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
   orderFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -372,14 +438,55 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF3F3',
     borderLeftWidth: 3,
     borderLeftColor: '#FF9800',
-    padding: 10,
+    padding: 12,
     marginTop: 12,
     borderRadius: 4,
+  },
+  reminderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   reminderText: {
     fontSize: 12,
     color: '#D84315',
     lineHeight: 18,
+    flex: 1,
+    marginRight: 10,
+  },
+  uploadButtonText: {
+    fontSize: 12,
+    color: '#8B1A1A',
+    fontWeight: 'bold',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FF9800',
+  },
+  proofUploaded: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    padding: 10,
+    marginTop: 12,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  proofUploadedText: {
+    fontSize: 12,
+    color: '#2E7D32',
+    fontWeight: '600',
+  },
+  proofThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
   },
   viewDetailsContainer: {
     marginTop: 12,

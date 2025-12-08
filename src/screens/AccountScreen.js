@@ -116,18 +116,24 @@ const AccountScreen = ({ navigation }) => {
         <View style={styles.menuSection}>
           <TouchableOpacity 
             style={styles.menuItem}
-            onPress={() => navigation.navigate('TrackOrder')}
+            onPress={() => navigation.navigate('TrackOrders')}
           >
             <Text style={styles.menuText}> My Orders</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('SavedAddresses')}
+          >
             <Text style={styles.menuText}> Saved Addresses</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity 
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('PaymentMethods')}
+          >
             <Text style={styles.menuText}>Payment Methods</Text>
             <Text style={styles.menuArrow}>→</Text>
           </TouchableOpacity>

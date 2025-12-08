@@ -14,7 +14,7 @@ export const useCart = () => {
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
 
   const addToCart = (product, quantity = 1) => {
     const existingItem = cartItems.find(item => item.id === product.id);
@@ -58,13 +58,17 @@ export const CartProvider = ({ children }) => {
 
   const login = (userData) => {
     setIsLoggedIn(true);
-    setUser(userData);
+    setUserInfo(userData);
   };
 
   const logout = () => {
     setIsLoggedIn(false);
-    setUser(null);
+    setUserInfo(null);
     clearCart();
+  };
+
+  const updateUserInfo = (updatedData) => {
+    setUserInfo({ ...userInfo, ...updatedData });
   };
 
   return (
@@ -72,7 +76,7 @@ export const CartProvider = ({ children }) => {
       value={{
         cartItems,
         isLoggedIn,
-        user,
+        userInfo,
         addToCart,
         removeFromCart,
         updateQuantity,
@@ -81,6 +85,7 @@ export const CartProvider = ({ children }) => {
         getCartCount,
         login,
         logout,
+        updateUserInfo,
       }}
     >
       {children}

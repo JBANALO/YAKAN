@@ -1,57 +1,60 @@
-import React from 'react';
+// src/screens/OrderDetailsScreen.js - Fixed version
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import colors from '../constants/colors';
+import { trackingStages } from '../constants/tracking';
 
 const OrderDetailsScreen = ({ navigation, route }) => {
-  const { order } = route.params;
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending_payment':
-        return '#FF9800';
-      case 'payment_verified':
-        return '#2196F3';
-      case 'processing':
-        return '#9C27B0';
-      case 'shipped':
-        return '#00BCD4';
-      case 'delivered':
-        return '#4CAF50';
-      case 'cancelled':
-        return '#F44336';
-      default:
-        return '#757575';
-    }
-  };
+  useEffect(() => {
+    loadOrderDetails();
+  }, []);
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'pending_payment':
-        return 'Pending Payment';
-      case 'payment_verified':
-        return 'Payment Verified';
-      case 'processing':
-        return 'Processing';
-      case 'shipped':
-        return 'Shipped';
-      case 'delivered':
-        return 'Delivered';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return 'Unknown';
+  const loadOrderDetails = async () => {
+    try {
+      // First, try to get from route params
+      if (route.params?.orderData) {
+        console.log('Order from params:', route.params.orderData);
+        setOrder(route.params.orderData);
+        setLoading(false);
+        return;
+      }
+
+      // If no params, try to get orderRef and load from storage
+      if (route.params?.orderRef) {
+        const ordersJson = await AsyncStorage.getItem('pendingOrders');
+        if (ordersJson) {
+          const orders = JSON.parse(ordersJson);
+          const foundOrder = orders.find(o => o.orderRef === route.params.orderRef);
+          if (foundOrder) {
+            console.log('Order from storage:', foundOrder);
+            setOrder(foundOrder);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading order:', error);
+      Alert.alert('Error', 'Failed to load order details');
+    } finally {
+      setLoading(false);
     }
   };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
-      month: 'long',
+      month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
@@ -59,213 +62,232 @@ const OrderDetailsScreen = ({ navigation, route }) => {
     });
   };
 
-  const getTrackingSteps = () => {
-    const steps = [
-      { 
-        key: 'pending_payment', 
-        label: 'Order Placed', 
-        description: 'Waiting for payment confirmation' 
-      },
-      { 
-        key: 'payment_verified', 
-        label: 'Payment Verified', 
-        description: 'Payment has been confirmed' 
-      },
-      { 
-        key: 'processing', 
-        label: 'Processing', 
-        description: 'Order is being prepared' 
-      },
-      { 
-        key: 'shipped', 
-        label: 'Shipped', 
-        description: 'Order is on the way' 
-      },
-      { 
-        key: 'delivered', 
-        label: 'Delivered', 
-        description: 'Order has been delivered' 
-      },
-    ];
-
-    const statusOrder = ['pending_payment', 'payment_verified', 'processing', 'shipped', 'delivered'];
-    const currentStatusIndex = statusOrder.indexOf(order.status);
-
-    return steps.map((step, index) => ({
-      ...step,
-      isCompleted: index <= currentStatusIndex,
-      isCurrent: index === currentStatusIndex,
-    }));
+  const handleContactSeller = () => {
+    Alert.alert(
+      'Contact Seller',
+      'How would you like to contact the seller?',
+      [
+        {
+          text: 'Messenger',
+          onPress: () => Alert.alert('Opening Messenger...'),
+        },
+        {
+          text: 'Call',
+          onPress: () => Alert.alert('Opening Phone...'),
+        },
+        {
+          text: 'Chat',
+          onPress: () => Alert.alert('Opening Chat...'),
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
-  const trackingSteps = getTrackingSteps();
-  const statusColor = getStatusColor(order.status);
-  const statusText = getStatusText(order.status);
+  const handleReturnRequest = () => {
+    Alert.alert(
+      'Return Request',
+      'Do you want to initiate a return for this order?',
+      [
+        {
+          text: 'Yes',
+          onPress: () => Alert.alert('Return initiated', 'Seller has been notified'),
+        },
+        {
+          text: 'No',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading order details...</Text>
+      </View>
+    );
+  }
+
+  // Show error if no order found
+  if (!order) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Order not found</Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const currentStageIndex = trackingStages.findIndex(s => s.key === order.status);
+  const displayStageIndex = Math.max(0, currentStageIndex);
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>←</Text>
+          <Text style={styles.backButtonHeader}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order Details</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.title}>Order Details</Text>
+        <View style={{ width: 50 }} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.statusCard}>
-          <Text style={styles.orderRef}>{order.orderRef}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-            <Text style={styles.statusText}>{statusText}</Text>
+        {/* Order Reference Card */}
+        <View style={styles.orderRefCard}>
+          <View>
+            <Text style={styles.orderRefLabel}>Order Reference</Text>
+            <Text style={styles.orderRefNumber}>{order.orderRef}</Text>
+            <Text style={styles.orderDate}>{formatDate(order.date)}</Text>
           </View>
-          <Text style={styles.orderDate}>Placed on {formatDate(order.date)}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: trackingStages[displayStageIndex].color }]}>
+            <Text style={styles.statusText}>
+              {trackingStages[displayStageIndex].label}
+            </Text>
+          </View>
         </View>
 
-        {order.status === 'pending_payment' && (
-          <View style={styles.paymentAlert}>
-            <Text style={styles.alertTitle}>Payment Required</Text>
-            <Text style={styles.alertText}>
-              Please send your payment to complete this order.
-            </Text>
-            <View style={styles.paymentDetailsBox}>
-              {order.paymentMethod === 'gcash' ? (
-                <>
-                  <Text style={styles.paymentLabel}>GCash Number:</Text>
-                  <Text style={styles.paymentValue}>0917-123-4567</Text>
-                  <Text style={styles.paymentLabel}>Name:</Text>
-                  <Text style={styles.paymentValue}>TUWAS Yakan Weaving</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.paymentLabel}>Bank: BDO</Text>
-                  <Text style={styles.paymentValue}>1234-5678-9012</Text>
-                  <Text style={styles.paymentLabel}>Name:</Text>
-                  <Text style={styles.paymentValue}>TUWAS Yakan Weaving</Text>
-                </>
-              )}
-            </View>
-            <Text style={styles.contactInfo}>
-              Send proof to:{'\n'}
-              • 0917-123-4567 (Viber/Messenger){'\n'}
-              • tuwasweavingyakan@gmail.com
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.section}>
+        {/* Tracking Timeline */}
+        <View style={styles.trackingSection}>
           <Text style={styles.sectionTitle}>Order Timeline</Text>
+          
           <View style={styles.timeline}>
-            {trackingSteps.map((step, index) => (
-              <View key={step.key} style={styles.timelineItem}>
-                <View style={styles.timelineLeft}>
-                  <View
-                    style={[
-                      styles.timelineDot,
-                      step.isCompleted && styles.timelineDotCompleted,
-                      step.isCurrent && styles.timelineDotCurrent,
-                    ]}
-                  />
-                  {index < trackingSteps.length - 1 && (
+            {trackingStages.map((stage, index) => {
+              const isCompleted = index <= currentStageIndex;
+              const isCurrent = index === currentStageIndex;
+
+              return (
+                <View key={stage.key} style={styles.timelineItem}>
+                  {/* Timeline Line */}
+                  {index < trackingStages.length - 1 && (
                     <View
                       style={[
                         styles.timelineLine,
-                        step.isCompleted && styles.timelineLineCompleted,
+                        isCompleted && styles.timelineLineCompleted,
                       ]}
                     />
                   )}
-                </View>
-                <View style={styles.timelineRight}>
-                  <Text
+
+                  {/* Stage Indicator */}
+                  <View
                     style={[
-                      styles.timelineLabel,
-                      step.isCompleted && styles.timelineLabelCompleted,
+                      styles.stageIndicator,
+                      isCompleted && styles.stageIndicatorCompleted,
+                      isCurrent && styles.stageIndicatorCurrent,
+                      { borderColor: stage.color, backgroundColor: isCompleted ? stage.color : colors.white },
                     ]}
                   >
-                    {step.label}
-                  </Text>
-                  <Text style={styles.timelineDescription}>
-                    {step.description}
-                  </Text>
+                    <Text style={[styles.stageIcon, isCompleted && styles.stageIconCompleted]}>
+                      {isCompleted ? stage.icon : index + 1}
+                    </Text>
+                  </View>
+
+                  {/* Stage Info */}
+                  <View style={styles.stageInfo}>
+                    <Text style={[styles.stageLabel, isCompleted && styles.stageLabelCompleted]}>
+                      {stage.label}
+                    </Text>
+                    <Text style={styles.stageDescription}>{stage.description}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items</Text>
-          {order.items.map((item, index) => (
-            <View key={index} style={styles.itemRow}>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
-              </View>
-              <Text style={styles.itemPrice}>
-                ₱{(item.price * item.quantity).toFixed(2)}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shipping Address</Text>
-          <Text style={styles.addressText}>
-            {order.shippingAddress.street}
-          </Text>
-          <Text style={styles.addressText}>
-            {order.shippingAddress.city}, {order.shippingAddress.province}
-          </Text>
-          <Text style={styles.addressText}>
-            {order.shippingAddress.zipCode}
-          </Text>
-          <Text style={styles.addressText}>
-            Phone: {order.shippingAddress.phoneNumber}
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Information</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Payment Method:</Text>
-            <Text style={styles.infoValue}>
-              {order.paymentMethod === 'gcash' ? 'GCash' : 'Bank Transfer'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Text style={styles.sectionTitle}>Order Summary</Text>
+        {/* Items Summary */}
+        <View style={styles.itemsSection}>
+          <Text style={styles.sectionTitle}>Items</Text>
           
+          {order.items && order.items.length > 0 ? (
+            order.items.map((item, index) => (
+              <View key={index} style={styles.itemCard}>
+                <View style={styles.itemHeader}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemPrice}>₱{(item.price || 0).toFixed(2)}</Text>
+                </View>
+                <Text style={styles.itemQuantity}>Quantity: {item.quantity}</Text>
+                <Text style={styles.itemTotal}>
+                  Subtotal: ₱{((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No items in order</Text>
+              <Text style={styles.emptySubtext}>Order data may not have loaded correctly</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Order Summary */}
+        <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>₱{order.subtotal.toFixed(2)}</Text>
+            <Text style={styles.summaryValue}>₱{(order.subtotal || 0).toFixed(2)}</Text>
           </View>
-          
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Shipping Fee</Text>
-            <Text style={styles.summaryValue}>₱{order.shippingFee.toFixed(2)}</Text>
+            <Text style={styles.summaryLabel}>Shipping</Text>
+            <Text style={styles.summaryValue}>₱{(order.shippingFee || 0).toFixed(2)}</Text>
           </View>
-          
-          <View style={styles.divider} />
-          
-          <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>₱{order.total.toFixed(2)}</Text>
+          <View style={[styles.summaryRow, styles.summaryTotal]}>
+            <Text style={styles.summaryTotalLabel}>Total</Text>
+            <Text style={styles.summaryTotalValue}>₱{(order.total || 0).toFixed(2)}</Text>
           </View>
         </View>
 
-        <View style={styles.helpSection}>
-          <Text style={styles.helpTitle}>Need Help?</Text>
-          <Text style={styles.helpText}>
-            Contact us for any questions about your order:
-          </Text>
-          <Text style={styles.helpContact}>
-            Phone: 0917-123-4567{'\n'}
-            Email: tuwasweavingyakan@gmail.com
-          </Text>
+        {/* Shipping Address */}
+        {order.shippingAddress && (
+          <View style={styles.addressSection}>
+            <Text style={styles.sectionTitle}>Delivery Address</Text>
+            <View style={styles.addressCard}>
+              <Text style={styles.addressLabel}>🏠 Delivery Address</Text>
+              <Text style={styles.addressName}>{order.shippingAddress.fullName || 'N/A'}</Text>
+              <Text style={styles.addressText}>{order.shippingAddress.phoneNumber || 'N/A'}</Text>
+              <Text style={styles.addressText}>
+                {order.shippingAddress.street || 'N/A'}
+              </Text>
+              <Text style={styles.addressText}>
+                {order.shippingAddress.city || 'N/A'}, {order.shippingAddress.province || 'N/A'} {order.shippingAddress.postalCode || ''}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Action Buttons */}
+        <View style={styles.actionsSection}>
+          <TouchableOpacity style={styles.actionButton} onPress={handleContactSeller}>
+            <Text style={styles.actionButtonIcon}>💬</Text>
+            <Text style={styles.actionButtonText}>Contact Seller</Text>
+          </TouchableOpacity>
+
+          {currentStageIndex >= trackingStages.length - 1 && (
+            <TouchableOpacity style={styles.actionButton} onPress={handleReturnRequest}>
+              <Text style={styles.actionButtonIcon}>↩️</Text>
+              <Text style={styles.actionButtonText}>Return/Exchange</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <View style={{ height: 30 }} />
+        {/* Help Section */}
+        <TouchableOpacity style={styles.helpSection}>
+          <Text style={styles.helpIcon}>❓</Text>
+          <Text style={styles.helpText}>Need help with your order?</Text>
+          <Text style={styles.helpArrow}>→</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -274,267 +296,343 @@ const OrderDetailsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: colors.textLight,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.textLight,
+    marginBottom: 20,
   },
   header: {
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    paddingTop: 40,
   },
-  backButton: {
-    fontSize: 28,
-    color: '#333',
+  backButtonHeader: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
-  headerTitle: {
-    fontSize: 20,
+  title: {
+    color: colors.white,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
   },
   content: {
     flex: 1,
+    padding: 15,
   },
-  statusCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginBottom: 15,
+  orderRefCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  orderRef: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
-  statusBadge: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 10,
-  },
-  statusText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  orderDate: {
-    fontSize: 13,
-    color: '#666',
-  },
-  paymentAlert: {
-    backgroundColor: '#FFF9F0',
-    borderLeftWidth: 4,
-    borderLeftColor: '#FF9800',
-    padding: 16,
-    marginBottom: 15,
-    marginHorizontal: 15,
-    borderRadius: 8,
-  },
-  alertTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#D84315',
-    marginBottom: 8,
-  },
-  alertText: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  paymentDetailsBox: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 12,
-  },
-  paymentLabel: {
-    fontSize: 13,
-    color: '#666',
+  orderRefLabel: {
+    fontSize: 12,
+    color: colors.textLight,
     marginBottom: 4,
   },
-  paymentValue: {
-    fontSize: 15,
+  orderRefNumber: {
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: 4,
   },
-  contactInfo: {
+  orderDate: {
     fontSize: 12,
-    color: '#666',
-    lineHeight: 18,
+    color: colors.textLight,
   },
-  section: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginBottom: 15,
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  statusText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  trackingSection: {
+    marginBottom: 25,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
     marginBottom: 15,
   },
   timeline: {
-    paddingLeft: 0,
+    paddingVertical: 10,
   },
   timelineItem: {
     flexDirection: 'row',
-    paddingBottom: 20,
-  },
-  timelineLeft: {
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  timelineDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#e0e0e0',
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
-  timelineDotCompleted: {
-    backgroundColor: '#4CAF50',
-  },
-  timelineDotCurrent: {
-    backgroundColor: '#8B1A1A',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    marginBottom: 25,
+    position: 'relative',
   },
   timelineLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: '#e0e0e0',
-    marginTop: 4,
+    position: 'absolute',
+    left: 20,
+    top: 50,
+    width: 3,
+    height: 60,
+    backgroundColor: '#DDD',
   },
   timelineLineCompleted: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
   },
-  timelineRight: {
+  stageIndicator: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+    backgroundColor: colors.white,
+  },
+  stageIndicatorCompleted: {
+    backgroundColor: colors.primary,
+  },
+  stageIndicatorCurrent: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  stageIcon: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  stageIconCompleted: {
+    color: colors.white,
+  },
+  stageInfo: {
     flex: 1,
-    paddingTop: 0,
+    justifyContent: 'center',
   },
-  timelineLabel: {
-    fontSize: 15,
+  stageLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#999',
+    color: colors.textLight,
     marginBottom: 4,
   },
-  timelineLabelCompleted: {
-    color: '#333',
+  stageLabelCompleted: {
+    color: colors.text,
   },
-  timelineDescription: {
-    fontSize: 13,
-    color: '#999',
-    lineHeight: 18,
+  stageDescription: {
+    fontSize: 12,
+    color: colors.textLight,
   },
-  itemRow: {
+  itemsSection: {
+    marginBottom: 20,
+  },
+  itemCard: {
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  itemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  itemQuantity: {
+    fontSize: 12,
+    color: colors.textLight,
+    marginBottom: 4,
+  },
+  itemTotal: {
+    fontSize: 12,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  emptyCard: {
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textLight,
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 12,
+    color: colors.textLight,
+  },
+  summaryCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.border,
   },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 15,
-    color: '#333',
-    marginBottom: 4,
-  },
-  itemQuantity: {
-    fontSize: 13,
-    color: '#666',
-  },
-  itemPrice: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  addressText: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 6,
-    lineHeight: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  summaryCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginBottom: 15,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+  summaryTotal: {
+    borderBottomWidth: 0,
+    marginTop: 5,
+    paddingVertical: 12,
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#666',
+    color: colors.text,
   },
   summaryValue: {
     fontSize: 14,
-    color: '#333',
+    fontWeight: '600',
+    color: colors.text,
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 10,
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  totalValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#8B1A1A',
-  },
-  helpSection: {
-    backgroundColor: '#F5F5F5',
-    padding: 20,
-    marginHorizontal: 15,
-    borderRadius: 8,
-    marginBottom: 15,
-  },
-  helpTitle: {
+  summaryTotalLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
+  },
+  summaryTotalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  addressSection: {
+    marginBottom: 20,
+  },
+  addressCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addressLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
     marginBottom: 8,
+  },
+  addressName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  addressText: {
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  actionsSection: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 20,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionButtonIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  helpSection: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 20,
+  },
+  helpIcon: {
+    fontSize: 24,
+    marginRight: 12,
   },
   helpText: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
   },
-  helpContact: {
+  helpArrow: {
+    fontSize: 18,
+    color: colors.primary,
+  },
+  backButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: colors.white,
     fontSize: 14,
-    color: '#8B1A1A',
-    lineHeight: 20,
+    fontWeight: '600',
   },
 });
 
