@@ -10,17 +10,14 @@ export const useOrders = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadOrders = useCallback(async () => {
+    setLoading(true);
     try {
       const savedOrders = await AsyncStorage.getItem(ORDERS_KEY);
-      if (savedOrders) {
-        const parsedOrders = JSON.parse(savedOrders);
-        setOrders(parsedOrders.sort((a, b) => new Date(b.date) - new Date(a.date)));
-      } else {
-        setOrders([]);
-      }
+      const localOrders = savedOrders ? JSON.parse(savedOrders) : [];
+      setOrders(localOrders.sort((a, b) => new Date(b.date) - new Date(a.date)));
     } catch (error) {
-      console.log('Error loading orders:', error);
-      setOrders([]); // Ensure orders is an array on error
+      console.error('Failed to load orders from local storage:', error);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -37,7 +34,7 @@ export const useOrders = () => {
     try {
       const savedOrders = await AsyncStorage.getItem(ORDERS_KEY);
       const currentOrders = savedOrders ? JSON.parse(savedOrders) : [];
-      
+
       const updatedOrders = currentOrders.map(o => {
         if (o.orderRef === order.orderRef) {
           return {
@@ -49,9 +46,8 @@ export const useOrders = () => {
         }
         return o;
       });
-      
+
       await AsyncStorage.setItem(ORDERS_KEY, JSON.stringify(updatedOrders));
-      
       Alert.alert(
         'Success!',
         'Payment proof uploaded successfully. Your order will be processed soon.',

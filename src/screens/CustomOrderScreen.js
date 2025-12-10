@@ -75,28 +75,33 @@ const CustomOrderScreen = ({ navigation }) => {
   };
 
   const saveCustomOrder = async (orderData) => {
-    const orderRef = 'CUSTOM-' + Date.now().toString().slice(-7);
-    const finalOrder = {
-      orderRef,
-      date: new Date().toISOString(),
-      items: [{
-        name: `Custom Order: ${orderData.pattern}`,
-        quantity: 1,
-        price: orderData.estimatedPrice,
-        details: `Color: ${orderData.color}, Size: ${orderData.size}`,
-      }],
-      total: orderData.estimatedPrice,
-      subtotal: orderData.estimatedPrice,
-      shippingFee: 0,
-      status: 'pending_confirmation', // Custom orders need confirmation first
-      isCustom: true, // Add a flag to identify custom orders
-      customDetails: orderData,
-    };
-
-    const existingOrders = await AsyncStorage.getItem('pendingOrders');
-    const orders = existingOrders ? JSON.parse(existingOrders) : [];
-    orders.push(finalOrder);
-    await AsyncStorage.setItem('pendingOrders', JSON.stringify(orders));
+    try {
+      const orderRef = 'LOCAL-' + Date.now().toString().slice(-7);
+      const finalOrder = {
+        orderRef,
+        date: new Date().toISOString(),
+        items: [{
+          name: `Custom Order: ${orderData.pattern}`,
+          quantity: 1,
+          price: orderData.estimatedPrice,
+          details: `Color: ${orderData.color}, Size: ${orderData.size}`,
+        }],
+        total: orderData.estimatedPrice,
+        subtotal: orderData.estimatedPrice,
+        shippingFee: 0,
+        status: 'pending_confirmation',
+        isCustom: true,
+        customDetails: orderData,
+      };
+      const existingOrders = await AsyncStorage.getItem('pendingOrders');
+      const orders = existingOrders ? JSON.parse(existingOrders) : [];
+      orders.push(finalOrder);
+      await AsyncStorage.setItem('pendingOrders', JSON.stringify(orders));
+    } catch (error) {
+      console.error('Failed to save custom order locally:', error);
+      // Re-throw the error to be caught by the calling function
+      throw error;
+    }
   };
 
   const pickImage = async () => {
@@ -136,14 +141,17 @@ const CustomOrderScreen = ({ navigation }) => {
       estimatedPrice: calculateEstimatedPrice(),
     };
     
-    await saveCustomOrder(orderData);
-
-    Alert.alert(
-      'Order Submitted!',
-      'Thank you! Your custom order request has been received. You can view its status in "Track Orders".',
-      [{ text: 'View My Orders', onPress: () => navigation.navigate('TrackOrders') },
-       { text: 'OK', onPress: () => navigation.goBack(), style: 'cancel' }]
-    );
+    try {
+      await saveCustomOrder(orderData);
+      Alert.alert(
+        'Order Submitted!',
+        'Thank you! Your custom order request has been received. You can view its status in "Track Orders".',
+        [{ text: 'View My Orders', onPress: () => navigation.navigate('TrackOrders') },
+         { text: 'OK', onPress: () => navigation.goBack(), style: 'cancel' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'There was a problem submitting your custom order. Please try again.');
+    }
   };
 
   return (
@@ -161,30 +169,51 @@ const CustomOrderScreen = ({ navigation }) => {
         <Text style={styles.sectionTitle}>Live Preview</Text>
         <View style={styles.previewContainer}>
           {(selectedPattern || uploadedImage) ? (
-            <View style={styles.previewBox}>
-              <Image
-                source={uploadedImage ? { uri: uploadedImage } : selectedPattern?.image}
-                style={styles.previewImage}
-                resizeMode="cover"
-              />
-              {selectedColor && (
-                <View style={[styles.colorOverlay, { backgroundColor: selectedColor.hex + '30' }]} />
-              )}
+            <View>
+              <View style={styles.previewBox}>
+                <Image
+                  source={uploadedImage ? { uri: uploadedImage } : selectedPattern?.image}
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
+                {selectedColor && (
+                  <View style={[styles.colorOverlay, { backgroundColor: selectedColor.hex + '40' }]} />
+                )}
+              </View>
+              <View style={styles.previewDetailsContainer}>
+                {selectedPattern && (
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewInfoText}>📋 Pattern: {selectedPattern.name}</Text>
+                  </View>
+                )}
+                {uploadedImage && (
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewInfoText}>✓ Custom Design Uploaded</Text>
+                  </View>
+                )}
+                {selectedColor && (
+                  <View style={styles.previewInfo}>
+                    <View style={styles.previewColorIndicator}>
+                      <View style={[styles.colorDot, { backgroundColor: selectedColor.hex }]} />
+                      <Text style={styles.previewInfoText}>Color: {selectedColor.name}</Text>
+                    </View>
+                  </View>
+                )}
+                {selectedSize && (
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewInfoText}>📏 Size: {selectedSize.label}</Text>
+                  </View>
+                )}
+                {customSize && (
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewInfoText}>📏 Size: {customSize} meters</Text>
+                  </View>
+                )}
+              </View>
             </View>
           ) : (
             <View style={styles.previewPlaceholder}>
-              <Text style={styles.placeholderText}>Select a pattern or upload design</Text>
-            </View>
-          )}
-          
-          {selectedColor && (
-            <View style={styles.previewInfo}>
-              <Text style={styles.previewInfoText}>Color: {selectedColor.name}</Text>
-            </View>
-          )}
-          {selectedSize && (
-            <View style={styles.previewInfo}>
-              <Text style={styles.previewInfoText}>Size: {selectedSize.label}</Text>
+              <Text style={styles.placeholderText}>👇 Select a pattern or upload design</Text>
             </View>
           )}
         </View>
@@ -361,13 +390,18 @@ const styles = StyleSheet.create({
   },
   previewContainer: {
     alignItems: 'center',
+    width: '100%',
   },
   previewBox: {
-    width: width - 80,
-    height: 250,
+    width: '100%',
+    height: 300,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginBottom: 15,
   },
   previewImage: {
     width: '100%',
@@ -381,30 +415,49 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   previewPlaceholder: {
-    width: width - 80,
-    height: 250,
+    width: '100%',
+    height: 300,
     borderRadius: 12,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#ccc',
+    borderColor: '#ddd',
     borderStyle: 'dashed',
+    marginBottom: 15,
   },
   placeholderText: {
     color: '#999',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  previewDetailsContainer: {
+    width: '100%',
+    gap: 10,
   },
   previewInfo: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#f9f9f9',
     paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#8B1A1A',
+  },
+  previewColorIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  colorDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#ddd',
   },
   previewInfoText: {
     fontSize: 14,
-    color: '#555',
+    color: '#333',
     fontWeight: '600',
   },
   section: {

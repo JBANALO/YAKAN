@@ -85,7 +85,7 @@ export default function CartScreen({ navigation }) {
             
             <View style={styles.itemDetails}>
               <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+              <Text style={styles.itemPrice}>₱{item.price.toFixed(2)}</Text>
               
               <View style={styles.quantityContainer}>
                 <TouchableOpacity 
@@ -108,7 +108,7 @@ export default function CartScreen({ navigation }) {
             
             <View style={styles.itemActions}>
               <Text style={styles.itemTotal}>
-                ${(item.price * item.quantity).toFixed(2)}
+                ₱{(item.price * item.quantity).toFixed(2)}
               </Text>
               <TouchableOpacity 
                 style={styles.removeButton}
@@ -124,7 +124,7 @@ export default function CartScreen({ navigation }) {
       <View style={styles.footer}>
         <View style={styles.totalContainer}>
           <Text style={styles.totalLabel}>Subtotal:</Text>
-          <Text style={styles.totalAmount}>${getCartTotal().toFixed(2)}</Text>
+          <Text style={styles.totalAmount}>₱{getCartTotal().toFixed(2)}</Text>
         </View>
         
         <TouchableOpacity 

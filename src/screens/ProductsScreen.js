@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,68 +8,85 @@ import {
   TextInput,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useCart } from '../context/CartContext';
+import ApiService from '../services/api';
 import BottomNav from '../components/BottomNav';
 
 const ProductsScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [favorites, setFavorites] = useState([]);
-  const { isLoggedIn } = useCart();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState(['All']);
+  const { isLoggedIn, addToWishlist, removeFromWishlist, isInWishlist } = useCart();
 
-  const categories = ['All', 'Saputangan', 'Pinantupan', 'Birey-Birey', 'Sinaluan'];
+  // Fetch products from API
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
-  const products = [
-    {
-      id: 1,
-      name: 'Saputangan',
-      description: 'The Saputangan is a square piece of woven cloth usually measuring no less than...',
-      price: 50.00,
-      category: 'Saputangan',
-      image: require('../assets/images/Saputangan.jpg'),
-    },
-    {
-      id: 2,
-      name: 'Pinantupan',
-      description: 'Pinantupan uses simple patterns like flowers and diamonds and are also used for...',
-      price: 50.00,
-      category: 'Pinantupan',
-      image: require('../assets/images/pinantupan.jpg'),
-    },
-    {
-      id: 3,
-      name: 'Birey-Birey',
-      description: 'Birey-birey is a traditional handwoven textile pattern that resembles the sections of...',
-      price: 50.00,
-      category: 'Birey-Birey',
-      image: require('../assets/images/birey4.jpg'),
-    },
-    {
-      id: 4,
-      name: 'Saputangan Classic',
-      description: 'Classic design with traditional Yakan patterns and vibrant colors...',
-      price: 60.00,
-      category: 'Saputangan',
-      image: require('../assets/images/SaputanganClassic.jpg'),
-    },
-    {
-      id: 5,
-      name: 'Sinaluan',
-      description: 'Sinaluan features intricate geometric patterns representing Yakan heritage...',
-      price: 75.00,
-      category: 'Sinaluan',
-      image: require('../assets/images/Sinaluan.jpg'),
-    },
-    {
-      id: 6,
-      name: 'Pinantupan Premium',
-      description: 'Premium quality Pinantupan with detailed floral patterns...',
-      price: 85.00,
-      category: 'Pinantupan',
-      image: require('../assets/images/pinantupanpremium.jpg'),
-    },
-  ];
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      
+      console.log('🔵 Fetching products from API...');
+      
+      // Fetch from Laravel API via ngrok
+      const response = await ApiService.getProducts();
+      
+      console.log('🔵 API Response:', JSON.stringify(response, null, 2));
+      
+      // Handle triple-nested response: response.data.data.data
+      // ApiService wraps in {success, data}, Laravel wraps in {data: {data: []}}
+      const apiData = response.data?.data || response.data || {};
+      console.log('🔵 API Data:', JSON.stringify(apiData, null, 2));
+      
+      const productsData = Array.isArray(apiData.data) ? apiData.data :  // Laravel pagination
+                          Array.isArray(apiData) ? apiData : [];
+      
+      console.log('🔵 Products Array Length:', productsData.length);
+      
+      // Transform API data to match app structure
+      const transformedProducts = productsData.map(product => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: parseFloat(product.price),
+        category: product.category?.name || 'Uncategorized',
+        image: product.image_url 
+          ? { uri: product.image_url }
+          : require('../assets/images/Saputangan.jpg'), // fallback image
+        stock: product.stock || 0,
+      }));
+      
+      setProducts(transformedProducts);
+      const uniqueCategories = ['All', ...new Set(transformedProducts.map(p => p.category))];
+      setCategories(uniqueCategories);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      Alert.alert('Error', 'Failed to fetch products. Using offline data.');
+      
+      // Fallback to mock data if API fails
+      const mockProducts = [
+        { id: 1, name: 'Saputangan', description: 'The Saputangan is a square piece of woven cloth usually measuring no less than standard size', price: 50, category: 'Saputangan', image: require('../assets/images/Saputangan.jpg') },
+        { id: 2, name: 'Pinantupan', description: 'Pinantupan uses simple patterns like flowers and diamonds for special occasions', price: 50, category: 'Pinantupan', image: require('../assets/images/pinantupan.jpg') },
+        { id: 3, name: 'Birey-Birey', description: 'Traditional handwoven textile pattern that resembles rice fields', price: 50, category: 'Birey-Birey', image: require('../assets/images/birey4.jpg') },
+        { id: 4, name: 'Saputangan Classic', description: 'Classic design with traditional Yakan patterns and vibrant colors', price: 60, category: 'Saputangan', image: require('../assets/images/SaputanganClassic.jpg') },
+        { id: 5, name: 'Sinaluan', description: 'Intricate geometric patterns representing Yakan heritage', price: 75, category: 'Sinaluan', image: require('../assets/images/Sinaluan.jpg') },
+        { id: 6, name: 'Pinantupan Premium', description: 'Premium quality with detailed floral patterns', price: 85, category: 'Pinantupan', image: require('../assets/images/pinantupanpremium.jpg') },
+        { id: 7, name: 'Birey-Birey Deluxe', description: 'Deluxe version with enhanced colors and intricate detailing', price: 70, category: 'Birey-Birey', image: require('../assets/images/birey4.jpg') },
+        { id: 8, name: 'Sinaluan Premium', description: 'Premium Sinaluan with extra fine weaving', price: 95, category: 'Sinaluan', image: require('../assets/images/Sinaluan.jpg') },
+      ];
+      
+      setProducts(mockProducts);
+      const uniqueCategories = ['All', ...new Set(mockProducts.map(p => p.category))];
+      setCategories(uniqueCategories);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
@@ -78,11 +95,19 @@ const ProductsScreen = ({ navigation }) => {
     return matchesCategory && matchesSearch;
   });
 
-  const toggleFavorite = (productId) => {
-    if (favorites.includes(productId)) {
-      setFavorites(favorites.filter(id => id !== productId));
+  const toggleFavorite = (product) => {
+    if (!isLoggedIn) {
+      Alert.alert('Login Required', 'Please login to add items to wishlist', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Login', onPress: () => navigation.navigate('Login') },
+      ]);
+      return;
+    }
+
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id);
     } else {
-      setFavorites([...favorites, productId]);
+      addToWishlist(product);
     }
   };
 
@@ -111,7 +136,13 @@ const ProductsScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF6B6B" />
+          <Text style={styles.loadingText}>Loading products...</Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -169,10 +200,10 @@ const ProductsScreen = ({ navigation }) => {
                   />
                   <TouchableOpacity
                     style={styles.favoriteButton}
-                    onPress={() => toggleFavorite(product.id)}
+                    onPress={() => toggleFavorite(product)}
                   >
                     <Text style={styles.favoriteIcon}>
-                      {favorites.includes(product.id) ? '❤️' : '🤍'}
+                      {isInWishlist(product.id) ? '❤️' : '🤍'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -202,6 +233,7 @@ const ProductsScreen = ({ navigation }) => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+      )}
 
       {/* Bottom Navigation */}
       <BottomNav navigation={navigation} activeRoute="Products" />
@@ -213,6 +245,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#666',
   },
   header: {
     flexDirection: 'row',

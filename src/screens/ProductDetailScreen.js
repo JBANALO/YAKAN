@@ -16,10 +16,19 @@ import colors from '../constants/colors';
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen({ route, navigation }) {
-  const { product } = route.params;
+  const { product } = route.params || {};
+  
+  if (!product) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Product not found</Text>
+      </View>
+    );
+  }
+  
   const [quantity, setQuantity] = useState(1);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const { addToCart, isLoggedIn } = useCart();
+  const { addToCart, isLoggedIn, addToWishlist, removeFromWishlist, isInWishlist } = useCart();
+  const [isFavorite, setIsFavorite] = useState(() => isInWishlist(product.id));
 
   const increaseQuantity = () => {
     setQuantity(quantity + 1);
@@ -29,6 +38,15 @@ export default function ProductDetailScreen({ route, navigation }) {
     if (quantity > 1) {
       setQuantity(quantity - 1);
     }
+  };
+
+  const handleFavoriteToggle = () => {
+    if (isFavorite) {
+      removeFromWishlist(product.id);
+    } else {
+      addToWishlist(product);
+    }
+    setIsFavorite(!isFavorite);
   };
 
   const handleAddToCart = () => {
@@ -75,7 +93,7 @@ export default function ProductDetailScreen({ route, navigation }) {
         
         <TouchableOpacity 
           style={styles.favoriteButton}
-          onPress={() => setIsFavorite(!isFavorite)}
+          onPress={handleFavoriteToggle}
         >
           <Text style={styles.favoriteIcon}>
             {isFavorite ? '❤️' : '🤍'}
@@ -194,6 +212,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  errorText: {
+    fontSize: 18,
+    color: colors.text,
+    textAlign: 'center',
+    marginTop: 100,
   },
   header: {
     flexDirection: 'row',

@@ -11,10 +11,28 @@ import {
 } from 'react-native';
 import { useCart } from '../context/CartContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ApiService from '../services/api';
 import colors from '../constants/colors';
 
 export default function PaymentScreen({ navigation, route }) {
-  const { orderData } = route.params;
+  const { orderData } = route.params || {};
+  
+  if (!orderData) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Text style={styles.backButton}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Payment</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Order data not found. Please try again.</Text>
+        </View>
+      </View>
+    );
+  }
+  
   const { clearCart } = useCart();
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -47,17 +65,10 @@ export default function PaymentScreen({ navigation, route }) {
     try {
       const savedOrders = await AsyncStorage.getItem('pendingOrders');
       const orders = savedOrders ? JSON.parse(savedOrders) : [];
-      
-      const updatedOrders = orders.map(o => 
-        o.orderRef === updatedOrder.orderRef ? updatedOrder : o
-      );
-
+      const updatedOrders = orders.map(o => o.orderRef === updatedOrder.orderRef ? updatedOrder : o);
       await AsyncStorage.setItem('pendingOrders', JSON.stringify(updatedOrders));
-      console.log('Order updated successfully in storage!');
     } catch (error) {
-      console.error('Failed to update order in storage:', error);
-      // We can still proceed even if this fails, as the user is navigated away.
-      // The main source of truth will soon be the backend anyway.
+      console.error('Failed to update order in local storage:', error);
     }
   };
 
@@ -69,19 +80,46 @@ export default function PaymentScreen({ navigation, route }) {
 
     setIsProcessing(true);
 
-    const finalOrderData = {
-      ...orderData,
-      paymentMethod: selectedPaymentMethod,
-      status: 'pending_confirmation', // Update status here
-    };
+    try {
+      // Prepare order data for API
+      const apiOrderData = {
+        customer_name: orderData.shippingAddress.fullName,
+        customer_email: 'mobile@user.com', // You can add this to orderData if needed
+        customer_phone: orderData.shippingAddress.phoneNumber,
+        shipping_address: `${orderData.shippingAddress.street}, ${orderData.shippingAddress.city}, ${orderData.shippingAddress.province} ${orderData.shippingAddress.postalCode}`,
+        payment_method: selectedPaymentMethod,
+        payment_status: 'paid',
+        items: orderData.items.map(item => ({
+          product_id: item.id,
+          quantity: item.quantity || 1,
+          price: item.price,
+        })),
+        subtotal: orderData.subtotal,
+        shipping_fee: orderData.shippingFee,
+        total: orderData.total,
+        notes: 'Order from mobile app',
+      };
 
-    // Simulate payment processing
-    setTimeout(async () => {
+      console.log('🔵 Sending order to API:', apiOrderData);
+
+      // Send order to backend
+      const response = await ApiService.createOrder(apiOrderData);
+      
+      console.log('🔵 Order created successfully:', response);
+
+      const finalOrderData = {
+        ...orderData,
+        paymentMethod: selectedPaymentMethod,
+        status: 'pending_confirmation',
+        backendOrderId: response.data?.id, // Save backend order ID
+      };
+
+      // Also save locally for offline access
       await updateOrderInStorage(finalOrderData);
       setIsProcessing(false);
       
       // Payment successful
-      Alert.alert('Payment Successful', 'Your order has been confirmed!', [
+      Alert.alert('Success', 'Your order has been sent to the admin!', [
         {
           text: 'View Order',
           onPress: () => {
@@ -90,7 +128,32 @@ export default function PaymentScreen({ navigation, route }) {
           },
         },
       ]);
-    }, 3000);
+    } catch (error) {
+      console.error('🔴 Error creating order:', error);
+      setIsProcessing(false);
+      
+      // Save locally even if API fails
+      const finalOrderData = {
+        ...orderData,
+        paymentMethod: selectedPaymentMethod,
+        status: 'pending_confirmation',
+      };
+      await updateOrderInStorage(finalOrderData);
+      
+      Alert.alert(
+        'Order Saved Locally',
+        'Order saved on your device. It will sync when connection is restored.',
+        [
+          {
+            text: 'View Order',
+            onPress: () => {
+              clearCart();
+              navigation.navigate('OrderDetails', { orderData: finalOrderData });
+            },
+          },
+        ]
+      );
+    }
   };
 
   const total = (orderData.subtotal || 0) + (orderData.shippingFee || 0);
@@ -230,6 +293,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: colors.text,
+    textAlign: 'center',
   },
   header: {
     backgroundColor: colors.primary,

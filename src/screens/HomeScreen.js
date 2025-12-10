@@ -20,8 +20,7 @@ const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [favorites, setFavorites] = useState([]);
-  const { getCartCount, isLoggedIn } = useCart();
+  const { getCartCount, isLoggedIn, addToWishlist, removeFromWishlist, isInWishlist } = useCart();
 
   const products = [
     {
@@ -38,7 +37,7 @@ export default function HomeScreen({ navigation }) {
       description: 'Pinantupan uses simple patterns like flowers and diamonds and are also used for...',
       price: 50.00,
       featured: true,
-      image: require('../assets/images/pattern1.jpg'),
+      image: require('../assets/images/pinantupan.jpg'),
     },
     {
       id: 3,
@@ -60,11 +59,19 @@ export default function HomeScreen({ navigation }) {
 
   const featuredProducts = products.filter(p => p.featured);
 
-  const toggleFavorite = (productId) => {
-    if (favorites.includes(productId)) {
-      setFavorites(favorites.filter(id => id !== productId));
+  const toggleFavorite = (product) => {
+    if (!isLoggedIn) {
+      Alert.alert('Login Required', 'Please login to add items to wishlist', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Login', onPress: () => navigation.navigate('Login') },
+      ]);
+      return;
+    }
+
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id);
     } else {
-      setFavorites([...favorites, productId]);
+      addToWishlist(product);
     }
   };
 
@@ -98,10 +105,10 @@ export default function HomeScreen({ navigation }) {
         />
         <TouchableOpacity
           style={styles.featuredFavoriteButton}
-          onPress={() => toggleFavorite(product.id)}
+          onPress={() => toggleFavorite(product)}
         >
           <Text style={styles.favoriteIcon}>
-            {favorites.includes(product.id) ? '❤️' : '🤍'}
+            {isInWishlist(product.id) ? '❤️' : '🤍'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -127,10 +134,10 @@ export default function HomeScreen({ navigation }) {
         />
         <TouchableOpacity
           style={styles.favoriteButton}
-          onPress={() => toggleFavorite(product.id)}
+          onPress={() => toggleFavorite(product)}
         >
           <Text style={styles.favoriteIcon}>
-            {favorites.includes(product.id) ? '❤️' : '🤍'}
+            {isInWishlist(product.id) ? '❤️' : '🤍'}
           </Text>
         </TouchableOpacity>
       </View>

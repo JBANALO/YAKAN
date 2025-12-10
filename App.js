@@ -13,6 +13,7 @@ import AccountScreen from './src/screens/AccountScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import ProductDetailScreen from './src/screens/ProductDetailScreen';
 import CartScreen from './src/screens/CartScreen';
+import WishlistScreen from './src/screens/WishlistScreen';
 import CheckoutScreen from './src/screens/CheckoutScreen';
 import TrackOrderScreen from './src/screens/TrackOrderScreen';
 import OrderDetailsScreen from './src/screens/OrderDetailsScreen';
@@ -41,6 +42,7 @@ const AppNavigator = () => (
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
     <Stack.Screen name="Cart" component={CartScreen} />
+    <Stack.Screen name="Wishlist" component={WishlistScreen} />
     <Stack.Screen name="Checkout" component={CheckoutScreen} />
     <Stack.Screen name="TrackOrders" component={TrackOrderScreen} />
     <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
